@@ -1,0 +1,91 @@
+import br.com.setis.interfaceautomacao.AplicacaoNaoInstaladaExcecao;
+import br.com.setis.interfaceautomacao.Confirmacoes;
+import br.com.setis.interfaceautomacao.DadosAutomacao;
+import br.com.setis.interfaceautomacao.EntradaTransacao;
+import br.com.setis.interfaceautomacao.Operacoes;
+import br.com.setis.interfaceautomacao.Personalizacao;
+import br.com.setis.interfaceautomacao.QuedaConexaoTerminalExcecao;
+import br.com.setis.interfaceautomacao.SaidaTransacao;
+import br.com.setis.interfaceautomacao.TerminalNaoConfiguradoExcecao;
+import br.com.setis.interfaceautomacao.Transacoes;
+
+public class Paygo {
+
+    private static String mensagem = null;
+    private static EntradaTransacao entradaTransacao = null;
+    private static Confirmacoes confirmacoes;
+    private static SaidaTransacao saidaTransacao;
+    private static DadosAutomacao dadosAutomacao;
+    private static Transacoes transacoes;
+
+    public static String efetuarTransacao(Operacoes operacao, Context context, String valorTotal, String transaction_id) {
+
+        iniciarClassesInterface(true,false, context);
+
+        if(entradaTransacao == null){
+            entradaTransacao = new EntradaTransacao(operacao,transaction_id);
+
+            if (operacao == Operacoes.VENDA) {
+                entradaTransacao.informaDocumentoFiscal("1000");
+            }
+
+            String aux = appUtil.verificaMascara(valorTotal);
+
+            entradaTransacao.informaValorTotal(aux);
+            entradaTransacao.informaCodigoMoeda("986");
+        }
+
+        entradaTransacao.informaDataHoraTransacaoOriginal(new Date());
+
+
+        confirmacoes = new Confirmacoes();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    saidaTransacao = transacoes
+                            .realizaTransacao(entradaTransacao);
+
+                    confirmacoes
+                            .informaIdentificadorConfirmacaoTransacao(saidaTransacao
+                                    .obtemIdentificadorConfirmacaoTransacao());
+
+                } catch (QuedaConexaoTerminalExcecao e) {
+
+                } catch (TerminalNaoConfiguradoExcecao e) {
+
+                    mensagem = "Cliente n�o configurado!";
+                } catch (AplicacaoNaoInstaladaExcecao e) {
+
+                    mensagem = "Aplica��o n�o instalada!";
+                } finally {
+
+                    entradaTransacao = null;
+                }
+            }
+        }).start();
+
+        return null;
+    }
+
+    private static void iniciarClassesInterface(boolean suportaViasDiferenciadas, boolean suportaViasReduzidas, Context context){
+
+        String versaoAutomacao;
+
+        try {
+            versaoAutomacao = context.getPackageManager().getPackageInfo(
+                    context.getPackageName(), 0).versionName;
+        } catch (PackageManager.NameNotFoundException e) {
+            versaoAutomacao = "Indisponivel";
+        }
+
+        Personalizacao.Builder personalizao_build = new Personalizacao.Builder();
+        Personalizacao personalizacao = personalizao_build.build();
+
+        dadosAutomacao = new DadosAutomacao("Avalia Shop", "Automacao Demo",
+                versaoAutomacao, true, true, suportaViasDiferenciadas, suportaViasReduzidas, personalizacao);
+
+        transacoes = Transacoes.obtemInstancia(dadosAutomacao,context);
+    }
+}
